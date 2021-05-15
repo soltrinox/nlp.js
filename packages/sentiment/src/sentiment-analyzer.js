@@ -49,19 +49,9 @@ class SentimentAnalyzer extends Clonable {
 
   registerDefault() {
     this.container.registerConfiguration('sentiment-analyzer', {}, false);
-    this.container.registerPipeline(
-      'sentiment-analyzer-process',
-      [
-        '.getDictionary',
-        '.getTokens',
-        '.calculate',
-        'delete output.sentimentDictionary',
-      ],
-      false
-    );
   }
 
-  prepare(locale, text, settings) {
+  prepare(locale, text, settings, stemmed) {
     const pipeline = this.getPipeline(`${this.settings.tag}-prepare`);
     if (pipeline) {
       const input = {
@@ -71,11 +61,19 @@ class SentimentAnalyzer extends Clonable {
       };
       return this.runPipeline(input, pipeline);
     }
-    const stemmer =
-      this.container.get(`stemmer-${locale}`) ||
-      this.container.get(`stemmer-en`);
-    if (stemmer) {
-      return stemmer.tokenizeAndStem(text);
+    if (stemmed) {
+      const stemmer =
+        this.container.get(`stemmer-${locale}`) ||
+        this.container.get(`stemmer-en`);
+      if (stemmer) {
+        return stemmer.tokenizeAndStem(text);
+      }
+    }
+    const tokenizer =
+      this.container.get(`tokenizer-${locale}`) ||
+      this.container.get(`tokenizer-en`);
+    if (tokenizer) {
+      return tokenizer.tokenize(text, true);
     }
     const normalized = text
       .normalize('NFD')
@@ -102,6 +100,7 @@ class SentimentAnalyzer extends Clonable {
         type,
         dictionary: undefined,
         negations: [],
+        stemmed: false,
       };
       return input;
     }
@@ -109,6 +108,8 @@ class SentimentAnalyzer extends Clonable {
       type,
       dictionary: dictionaries[type],
       negations: dictionaries.negations.words,
+      stemmed:
+        dictionaries.stemmed === undefined ? false : dictionaries.stemmed,
     };
     return input;
   }
@@ -119,7 +120,8 @@ class SentimentAnalyzer extends Clonable {
       input.tokens = await this.prepare(
         input.locale,
         input.utterance || input.text,
-        input.settings
+        input.settings,
+        input.sentimentDictionary.stemmed
       );
     }
     return input;
@@ -185,10 +187,21 @@ class SentimentAnalyzer extends Clonable {
     return input;
   }
 
+  async defaultPipelineProcess(input) {
+    let output = await this.getDictionary(input);
+    output = await this.getTokens(output);
+    output = await this.calculate(output);
+    delete output.sentimentDictionary;
+    return output;
+  }
+
   process(srcInput, settings) {
     const input = srcInput;
     input.settings = input.settings || settings || this.settings;
-    return this.runPipeline(input, this.pipelineProcess);
+    if (this.pipelineProcess) {
+      return this.runPipeline(input, this.pipelineProcess);
+    }
+    return this.defaultPipelineProcess(input);
   }
 }
 

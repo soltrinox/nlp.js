@@ -53,9 +53,12 @@ function bootstrap() {
 describe('NLU Neural', () => {
   describe('Train and process', () => {
     test('It can train and process a corpus', async () => {
-      const nlu = new NluNeural({ locale: 'en' }, bootstrap());
+      const nlu = new NluNeural(
+        { locale: 'en', useNoneFeature: true },
+        bootstrap()
+      );
       const status = await nlu.train(corpus);
-      expect(status.status.iterations).toEqual(26);
+      expect(status.status.iterations).toEqual(34);
       const json = nlu.neuralNetwork.toJSON();
       nlu.neuralNetwork.fromJSON(json);
       let good = 0;
@@ -81,7 +84,7 @@ describe('NLU Neural', () => {
 
     test('It can explain the results', async () => {
       const nlu = new NluNeural(
-        { locale: 'en', returnExplanation: true },
+        { locale: 'en', returnExplanation: true, useNoneFeature: true },
         bootstrap()
       );
       await nlu.train(corpus);
@@ -91,28 +94,79 @@ describe('NLU Neural', () => {
         {
           stem: '##bias',
           token: '',
-          weight: -1.312396567047904,
+          weight: -1.5109167334016105,
         },
         {
           stem: 'what',
           token: 'what',
-          weight: 1.571290135383606,
+          weight: 1.7451834678649902,
         },
         {
           stem: 'develop',
           token: 'develop',
-          weight: 2.3145315647125244,
+          weight: 2.6306886672973633,
         },
         {
           stem: 'your',
           token: 'your',
-          weight: 1.1261751651763916,
+          weight: 1.4032098054885864,
         },
         {
           stem: 'company',
           token: 'company',
-          weight: 5.1498212814331055,
+          weight: 5.8944525718688965,
         },
+      ]);
+    });
+
+    test('An allow list can be added', async () => {
+      const nlu = new NluNeural(
+        { locale: 'en', useNoneFeature: true },
+        bootstrap()
+      );
+      await nlu.train(corpus);
+      const result = await nlu.process('who are you', {
+        allowList: ['smalltalk.annoying', 'smalltalk.hungry'],
+      });
+      expect(result.classifications).toEqual([
+        { intent: 'smalltalk.annoying', score: 0.9818832383975855 },
+        { intent: 'smalltalk.hungry', score: 0.018116761602414464 },
+        { intent: 'smalltalk.acquaintance', score: 0 },
+        { intent: 'smalltalk.bad', score: 0 },
+      ]);
+    });
+
+    test('An allow list with wildcars can be added', async () => {
+      const nlu = new NluNeural(
+        { locale: 'en', useNoneFeature: true },
+        bootstrap()
+      );
+      await nlu.train(corpus);
+      const result = await nlu.process('who are you', {
+        allowList: ['smalltalk.an*', 'smalltalk.hun*'],
+      });
+      expect(result.classifications).toEqual([
+        { intent: 'smalltalk.annoying', score: 0.9818832383975855 },
+        { intent: 'smalltalk.hungry', score: 0.018116761602414464 },
+        { intent: 'smalltalk.acquaintance', score: 0 },
+        { intent: 'smalltalk.bad', score: 0 },
+      ]);
+    });
+
+    test('Allow list can be an object', async () => {
+      const nlu = new NluNeural(
+        { locale: 'en', useNoneFeature: true },
+        bootstrap()
+      );
+      await nlu.train(corpus);
+      const result = await nlu.process('who are you', {
+        allowList: { 'smalltalk.annoying': 1, 'smalltalk.hungry': 1 },
+      });
+      expect(result.classifications).toEqual([
+        { intent: 'smalltalk.annoying', score: 0.9818832383975855 },
+        { intent: 'smalltalk.hungry', score: 0.018116761602414464 },
+        { intent: 'smalltalk.acquaintance', score: 0 },
+        { intent: 'smalltalk.bad', score: 0 },
       ]);
     });
   });

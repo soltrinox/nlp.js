@@ -37,8 +37,6 @@ function runDiscard(srcEdge, srcOther, useMaxLength) {
   if (other.start <= edge.end && other.end >= edge.start) {
     if (other.accuracy < edge.accuracy) {
       other.discarded = true;
-    } else if (other.accuracy > edge.accuracy) {
-      edge.discarded = true;
     } else if (
       (useMaxLength ||
         other.entity === edge.entity ||
@@ -49,8 +47,7 @@ function runDiscard(srcEdge, srcOther, useMaxLength) {
       if (
         other.start === edge.start &&
         other.end === edge.end &&
-        other.type === 'enum' &&
-        edge.type === 'enum' &&
+        other.type === edge.type &&
         other.entity === edge.entity &&
         other.option === edge.option
       ) {
@@ -86,7 +83,7 @@ function reduceEdges(edges, useMaxLength = true) {
     if (!edge.discarded) {
       for (let j = i + 1; j < edgeslen; j += 1) {
         const other = edges[j];
-        if (!edge.discarded) {
+        if (!other.discarded) {
           runDiscard(edge, other, useMaxLength);
         }
       }

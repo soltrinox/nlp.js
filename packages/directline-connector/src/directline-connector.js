@@ -21,27 +21,23 @@
  * WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-const { defaultContainer, Clonable } = require('@nlpjs/core');
+const fs = require('fs');
+const formidable = require('formidable');
+const { Connector } = require('@nlpjs/connector');
 const DirectlineController = require('./directline-controller');
 
-class DirectlineConnector extends Clonable {
-  constructor(settings = {}, container) {
-    super(
-      {
-        settings: {},
-        container: settings.container || container || defaultContainer,
-      },
-      container
-    );
-    this.applySettings(this.settings, settings);
-    this.registerDefault();
-    if (!this.settings.tag) {
-      this.settings.tag = 'directline';
+class DirectlineConnector extends Connector {
+  constructor(settings, container) {
+    super(settings, container);
+    if (this.settings.autoRemoveFiles === undefined) {
+      this.settings.autoRemoveFiles = true;
     }
-    this.applySettings(
-      this.settings,
-      this.container.getConfiguration(this.settings.tag)
-    );
+    if (this.settings.uploadDir === undefined) {
+      this.settings.uploadDir = './uploads/';
+    }
+    if (this.settings.maxFileSize === undefined) {
+      this.settings.maxFileSize = 8000000;
+    }
   }
 
   registerDefault() {
@@ -63,7 +59,13 @@ class DirectlineConnector extends Clonable {
     if (!server) {
       throw new Error('No api-server found');
     }
-    this.controller = new DirectlineController(this.settings);
+    this.controller = new DirectlineController(this.settings, this);
+    if (this.onCreateConversation) {
+      this.controller.onCreateConversation = this.onCreateConversation;
+    }
+    if (this.onHear) {
+      this.controller.onHear = this.onHear;
+    }
 
     server.options('/directline', (req, res) => {
       this.log('debug', `OPTIONS /directline`);
@@ -107,6 +109,46 @@ class DirectlineConnector extends Clonable {
           req.body
         );
         res.status(result.status).send(result.body);
+      }
+    );
+
+    server.post('/directline/tokens/refresh', (req, res) => {
+      this.log('trace', `POST /directline/tokens/refresh`);
+      res.status(200).end();
+    });
+
+    server.post(
+      `/directline/conversations/:conversationId/upload`,
+      async (req, res) => {
+        this.log(
+          'debug',
+          `POST /directline/conversations/:conversationId/upload`
+        );
+        const form = formidable({
+          multiples: true,
+          uploadDir: this.settings.uploadDir,
+          keepExtensions: false,
+          maxFileSize: this.settings.maxFileSize,
+        });
+        form.parse(req, async (err, fields, files) => {
+          if (err) {
+            res.status(500).send('There was an error processing the message');
+          } else {
+            const activity = JSON.parse(
+              fs.readFileSync(files.activity.path, 'utf-8')
+            );
+            activity.file = files.file;
+            const result = await this.controller.addActivity(
+              req.params.conversationId,
+              activity
+            );
+            if (this.settings.autoRemoveFiles) {
+              fs.unlinkSync(files.activity.path);
+              fs.unlinkSync(files.file.path);
+            }
+            res.status(result.status).send(result.body);
+          }
+        });
       }
     );
 
@@ -230,6 +272,20 @@ class DirectlineConnector extends Clonable {
       this.log('debug', 'DELETE /v3/botstate/:channelId/users/:userId');
       res.status(200).end();
     });
+  }
+
+  createAnswer(srcActivity) {
+    return this.controller.createAnswer(srcActivity);
+  }
+
+  say(srcActivity, text) {
+    if (typeof text === 'string') {
+      const answer = this.createAnswer(srcActivity.activity || srcActivity);
+      answer.text = text || srcActivity.text;
+      this.controller.say(answer);
+    } else {
+      this.controller.say(srcActivity);
+    }
   }
 }
 

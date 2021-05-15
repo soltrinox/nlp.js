@@ -1,4 +1,5 @@
 {
+  "ApiAuthJwt": { "className": "ApiAuthJwt", "path": "@nlpjs/api-auth-jwt" },
   "Basic": [
     { "className": "logger", "path": "@nlpjs/logger" },
     { "className": "Evaluator", "path": "@nlpjs/evaluator" },
@@ -6,6 +7,8 @@
     { "className": "Nlp", "path": "@nlpjs/nlp" },
     { "className": "Template", "path": "@nlpjs/evaluator"}
   ],
+  "Bot": { "className": "Bot", "path": "@nlpjs/bot" },
+  "BuiltinCompromise": { "className": "BuiltinCompromise", "path": "@nlpjs/builtin-compromise" },
   "BuiltinDuckling": { "className": "BuiltinDuckling", "path": "@nlpjs/builtin-duckling" },
   "BuiltinMicrosoft": { "className": "BuiltinMicrosoft", "path": "@nlpjs/builtin-microsoft" },
   "ConsoleConnector": { "className": "ConsoleConnector", "path": "@nlpjs/console-connector" },
@@ -14,6 +17,7 @@
   "ExpressApiServer": { "className": "ExpressApiServer", "path": "@nlpjs/express-api-server" },
   "ExpressApiServerless": { "className": "ExpressApiServerless", "path": "@nlpjs/express-api-serverless" },
   "Evaluator": { "className": "Evaluator", "path": "@nlpjs/evaluator" },
+  "FbConnector": { "className": "FbConnector", "path": "@nlpjs/fb-connector" },
   "JavascriptCompiler": { "className": "JavascriptCompiler", "path": "@nlpjs/evaluator"},
   "LangAll": { "className": "LangAll", "path": "@nlpjs/lang-all" },
   "LangAr": { "className": "LangAll", "path": "@nlpjs/lang-ar" },
@@ -46,11 +50,13 @@
   "LangSv": { "className": "LangSv", "path": "@nlpjs/lang-sv" },
   "LangTa": { "className": "LangTa", "path": "@nlpjs/lang-ta" },
   "LangTh": { "className": "LangTh", "path": "@nlpjs/lang-th" },
-  "LangTl": { "className": "LangTl", "path": "@nlpjs/lang-gtl" },
+  "LangTl": { "className": "LangTl", "path": "@nlpjs/lang-tl" },
   "LangTr": { "className": "LangTr", "path": "@nlpjs/lang-tr" },
   "LangUk": { "className": "LangUk", "path": "@nlpjs/lang-uk" },
   "LangZh": { "className": "LangZh", "path": "@nlpjs/lang-zh" },
   "logger": { "className": "logger", "path": "@nlpjs/logger" },
+  "Mongodb": { "className": "MongodbAdapter", "path": "@nlpjs/mongodb-adapter" },
+  "MongodbAdapter": { "className": "MongodbAdapter", "path": "@nlpjs/mongodb-adapter" },
   "MsbfConnector": { "className": "MsbfConnector", "path": "@nlpjs/msbf-connector" },
   "Nlp": { "className": "Nlp", "path": "@nlpjs/nlp" },
   "NluLuis": { "className": "NluLuis", "path": "@nlpjs/nlu-luis" },

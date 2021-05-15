@@ -22,12 +22,10 @@
  */
 
 const { defaultContainer, Clonable } = require('@nlpjs/core');
-const express = require('express');
-const cors = require('cors');
-const path = require('path');
+const ExpressApiApp = require('./express-api-app');
 
 class ExpressApiServer extends Clonable {
-  constructor(settings = {}, container) {
+  constructor(settings = {}, container = undefined) {
     super(
       {
         settings: {},
@@ -44,6 +42,11 @@ class ExpressApiServer extends Clonable {
       this.settings,
       this.container.getConfiguration(this.settings.tag)
     );
+    if (!this.settings.apiRoot) {
+      this.settings.apiRoot = '/api';
+    }
+    this.plugins = [];
+    this.routers = [];
   }
 
   registerDefault() {
@@ -58,21 +61,27 @@ class ExpressApiServer extends Clonable {
     return this.app !== undefined;
   }
 
+  newRouter() {
+    return ExpressApiApp.newRouter();
+  }
+
   start(input = {}) {
+    this.server = null;
     const port = input.port || this.settings.port;
-    this.app = express();
-    if (this.settings.serveBot) {
-      this.app.use(express.static(path.join(__dirname, './public')));
-    }
-    this.app.use(cors());
-    this.app.use(express.urlencoded({ extended: false }));
-    this.app.use(express.json());
+    const expressApp = new ExpressApiApp(
+      this.settings,
+      this.plugins,
+      this.routers
+    );
+    this.app = expressApp.initialize();
+
     if (port && port > 0) {
-      this.app.listen(port, () => {
+      this.server = this.app.listen(port, () => {
         const logger = this.container.get('logger');
         logger.info(`${this.settings.tag} listening on port ${port}!`);
       });
     }
+    return this.server !== null;
   }
 }
 

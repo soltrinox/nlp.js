@@ -33,6 +33,7 @@ const {
   ConversationContext,
   MemoryConversationContext,
 } = require('./recognizer');
+const { BrainNLU } = require('./nlu');
 
 module.exports = {
   Language,
@@ -54,4 +55,5 @@ module.exports = {
   Recognizer,
   ConversationContext,
   MemoryConversationContext,
+  BrainNLU,
 };

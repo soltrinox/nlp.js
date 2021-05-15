@@ -67,17 +67,6 @@ class NluManager extends Clonable {
       ['.innerTrain'],
       false
     );
-    this.container.registerPipeline(
-      'nlu-manager-process',
-      [
-        '.fillLanguage',
-        '.innerClassify',
-        '.checkIfIsNone',
-        'delete output.settings',
-        'delete output.classification',
-      ],
-      false
-    );
   }
 
   describeLanguage(locale, name) {
@@ -98,10 +87,23 @@ class NluManager extends Clonable {
               locale,
               ...this.settings.domain,
               useNoneFeature: this.settings.useNoneFeature,
+              trainByDomain: this.settings.trainByDomain,
             },
             this.container
           );
         }
+      }
+    }
+  }
+
+  removeLanguage(locales) {
+    if (Array.isArray(locales)) {
+      locales.forEach((locale) => this.removeLanguage(locale));
+    } else {
+      delete this.domainManagers[locales];
+      const index = this.locales.indexOf(locales);
+      if (index !== -1) {
+        this.locales.splice(index, 1);
       }
     }
   }
@@ -301,6 +303,15 @@ class NluManager extends Clonable {
     return input;
   }
 
+  async defaultPipelineProcess(input) {
+    let output = await this.fillLanguage(input);
+    output = await this.innerClassify(output);
+    output = await this.checkIfIsNone(output);
+    delete output.settings;
+    delete output.classification;
+    return output;
+  }
+
   process(locale, utterance, domain, settings) {
     const input =
       typeof locale === 'object'
@@ -311,7 +322,10 @@ class NluManager extends Clonable {
             domain,
             settings: settings || this.settings,
           };
-    return this.runPipeline(input, this.pipelineProcess);
+    if (this.pipelineProcess) {
+      return this.runPipeline(input, this.pipelineProcess);
+    }
+    return this.defaultPipelineProcess(input);
   }
 
   toJSON() {

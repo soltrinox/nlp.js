@@ -49,11 +49,6 @@ class NlgManager extends Clonable {
 
   registerDefault() {
     this.container.registerConfiguration('nlg-manager', {}, false);
-    this.container.registerPipeline(
-      'nlg-manager-find',
-      ['.findAllAnswers', '.filterAnswers', '.renderRandom', '.chooseRandom'],
-      false
-    );
   }
 
   findAllAnswers(srcInput) {
@@ -111,7 +106,7 @@ class NlgManager extends Clonable {
     if (!srcText) {
       return srcText;
     }
-    let text = srcText;
+    let text = srcText.answer || srcText;
     let matchFound;
     do {
       const match = /\((?:[^()]+)\|(?:[^()]+)\)/g.exec(text);
@@ -132,6 +127,10 @@ class NlgManager extends Clonable {
     const template = this.container.get('Template');
     if (template && context) {
       return template.compile(srcText, context);
+    }
+    if (srcText.answer) {
+      srcText.answer = text;
+      return srcText;
     }
     return text;
   }
@@ -188,6 +187,14 @@ class NlgManager extends Clonable {
     }
   }
 
+  defaultPipelineFind(input) {
+    let output = this.findAllAnswers(input);
+    output = this.filterAnswers(output);
+    output = this.renderRandom(output);
+    output = this.chooseRandom(output);
+    return output;
+  }
+
   find(locale, intent, context, settings) {
     const input = {
       locale,
@@ -195,7 +202,10 @@ class NlgManager extends Clonable {
       context,
       settings: settings || this.settings,
     };
-    return this.runPipeline(input, this.pipelineFind);
+    if (this.pipelineFind) {
+      return this.runPipeline(input, this.pipelineFind);
+    }
+    return this.defaultPipelineFind(input);
   }
 
   run(srcInput, settings) {

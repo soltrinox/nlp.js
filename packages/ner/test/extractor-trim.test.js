@@ -21,32 +21,19 @@
  * WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-const { containerBootstrap } = require('@nlpjs/core');
-const {
-  Ner,
-  ExtractorEnum,
-  ExtractorRegex,
-  ExtractorTrim,
-  ExtractorBuiltin,
-} = require('../src');
-
-const container = containerBootstrap();
-container.use(ExtractorEnum);
-container.use(ExtractorRegex);
-container.use(ExtractorTrim);
-container.use(ExtractorBuiltin);
+const { Ner, ExtractorTrim } = require('../src');
 
 describe('Extractor Trim', () => {
   describe('Constructor', () => {
     test('It should create an instance', () => {
-      const instance = new ExtractorTrim({ container });
+      const instance = new ExtractorTrim();
       expect(instance).toBeDefined();
     });
   });
 
   describe('Extract', () => {
     test('It should extract a between rule', async () => {
-      const ner = new Ner({ container });
+      const ner = new Ner();
       ner.addBetweenCondition('en', 'entity', 'from', 'to');
       const input = {
         text: 'I have to go from Madrid to Barcelona',
@@ -68,7 +55,7 @@ describe('Extractor Trim', () => {
       ]);
     });
     test('It should extract a get before rule', async () => {
-      const ner = new Ner({ container });
+      const ner = new Ner();
       ner.addBeforeCondition('en', 'entity', 'from');
       const input = {
         text: 'I have to go from Madrid from Barcelona',
@@ -101,7 +88,7 @@ describe('Extractor Trim', () => {
       ]);
     });
     test('It should extract a get before last rule', async () => {
-      const ner = new Ner({ container });
+      const ner = new Ner();
       ner.addBeforeLastCondition('en', 'entity', 'from');
       const input = {
         text: 'I have to go from Madrid from Barcelona',
@@ -123,7 +110,7 @@ describe('Extractor Trim', () => {
       ]);
     });
     test('It should extract a get before first rule', async () => {
-      const ner = new Ner({ container });
+      const ner = new Ner();
       ner.addBeforeFirstCondition('en', 'entity', 'from');
       const input = {
         text: 'I have to go from Madrid from Barcelona',
@@ -145,7 +132,7 @@ describe('Extractor Trim', () => {
       ]);
     });
     test('It should extract a get after rule', async () => {
-      const ner = new Ner({ container });
+      const ner = new Ner();
       ner.addAfterCondition('en', 'entity', 'from');
       const input = {
         text: 'I have to go from Madrid from Barcelona',
@@ -178,7 +165,7 @@ describe('Extractor Trim', () => {
       ]);
     });
     test('It should extract a get after first rule', async () => {
-      const ner = new Ner({ container });
+      const ner = new Ner();
       ner.addAfterFirstCondition('en', 'entity', 'from');
       const input = {
         text: 'I have to go from Madrid from Barcelona',
@@ -200,7 +187,7 @@ describe('Extractor Trim', () => {
       ]);
     });
     test('It should extract a get after last rule', async () => {
-      const ner = new Ner({ container });
+      const ner = new Ner();
       ner.addAfterLastCondition('en', 'entity', 'from');
       const input = {
         text: 'I have to go from Madrid from Barcelona',
@@ -217,6 +204,29 @@ describe('Extractor Trim', () => {
           accuracy: 0.99,
           sourceText: 'Barcelona',
           utteranceText: 'Barcelona',
+          entity: 'entity',
+        },
+      ]);
+    });
+
+    test('It should be able to retrieve at start of utterance', async () => {
+      const ner = new Ner();
+      ner.addAfterLastCondition('en', 'entity', 'from');
+      const input = {
+        text: 'from Barcelona to Madrid',
+        locale: 'en',
+      };
+      const actual = await ner.process(input);
+      expect(actual.entities).toEqual([
+        {
+          type: 'trim',
+          subtype: 'afterLast',
+          start: 5,
+          end: 23,
+          len: 19,
+          accuracy: 0.99,
+          sourceText: 'Barcelona to Madrid',
+          utteranceText: 'Barcelona to Madrid',
           entity: 'entity',
         },
       ]);

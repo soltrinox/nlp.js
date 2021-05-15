@@ -22,10 +22,15 @@
  */
 
 const { Clonable } = require('@nlpjs/core');
+const ExtractorEnum = require('./extractor-enum');
+const ExtractorRegex = require('./extractor-regex');
+const ExtractorTrim = require('./extractor-trim');
+const ExtractorBuiltin = require('./extractor-builtin');
+
 const { TrimType } = require('./trim-types');
 
 class Ner extends Clonable {
-  constructor(settings = {}, container) {
+  constructor(settings = {}, container = undefined) {
     super(
       {
         settings: {},
@@ -49,33 +54,9 @@ class Ner extends Clonable {
     });
   }
 
-  registerDefault() {
-    this.container.registerPipeline(
-      'ner-process',
-      [
-        '.decideRules',
-        'extract-enum',
-        'extract-regex',
-        'extract-trim',
-        'extract-builtin',
-      ],
-      false
-    );
-    this.container.registerPipeline(
-      'ner-??-process',
-      [
-        '.decideRules',
-        'extract-enum',
-        'extract-regex',
-        'extract-trim',
-        'extract-builtin',
-        '.reduceEdges',
-      ],
-      false
-    );
-  }
+  registerDefault() {}
 
-  getRulesByName(locale = '*', name, force = false) {
+  getRulesByName(locale = '*', name = '', force = false) {
     if (!this.rules[locale]) {
       if (!force) {
         return undefined;
@@ -96,17 +77,23 @@ class Ner extends Clonable {
   }
 
   addRule(locale = '*', name, type, rule) {
-    if (!this.rules[locale]) {
-      this.rules[locale] = {};
+    if (Array.isArray(locale)) {
+      for (let i = 0; i < locale.length; i += 1) {
+        this.addRule(locale[i], name, type, rule);
+      }
+    } else {
+      if (!this.rules[locale]) {
+        this.rules[locale] = {};
+      }
+      if (!this.rules[locale][name]) {
+        this.rules[locale][name] = {
+          name,
+          type,
+          rules: [],
+        };
+      }
+      this.rules[locale][name].rules.push(rule);
     }
-    if (!this.rules[locale][name]) {
-      this.rules[locale][name] = {
-        name,
-        type,
-        rules: [],
-      };
-    }
-    this.rules[locale][name].rules.push(rule);
   }
 
   asString(item) {
@@ -269,7 +256,7 @@ class Ner extends Clonable {
       }
     }
     let regex = `/${conditions.join('|')}/g`;
-    if (!(options.caseSensitive === true)) {
+    if (options.caseSensitive !== true) {
       regex += 'i';
     }
     const rule = {
@@ -324,14 +311,64 @@ class Ner extends Clonable {
     return input;
   }
 
+  async defaultPipelineProcess(input) {
+    if (!this.cache) {
+      this.cache = {
+        extractEnum: this.container.get('extract-enum'),
+        extractRegex: this.container.get('extract-regex'),
+        extractTrim: this.container.get('extract-trim'),
+        extractBuiltin: this.container.get('extract-builtin'),
+      };
+      if (!this.cache.extractEnum) {
+        this.container.use(ExtractorEnum);
+        this.cache.extractEnum = this.container.get('extract-enum');
+      }
+      if (!this.cache.extractRegex) {
+        this.container.use(ExtractorRegex);
+        this.cache.extractRegex = this.container.get('extract-regex');
+      }
+      if (!this.cache.extractTrim) {
+        this.container.use(ExtractorTrim);
+        this.cache.extractTrim = this.container.get('extract-trim');
+      }
+      if (!this.cache.extractBuiltin) {
+        this.container.use(ExtractorBuiltin);
+        this.cache.extractBuiltin = this.container.get('extract-builtin');
+      }
+    }
+    let output = await this.decideRules(input);
+    if (this.cache.extractEnum) {
+      output = await this.cache.extractEnum.run(output);
+    }
+    if (this.cache.extractRegex) {
+      output = await this.cache.extractRegex.run(output);
+    }
+    if (this.cache.extractTrim) {
+      output = await this.cache.extractTrim.run(output);
+    }
+    if (this.cache.extractBuiltin) {
+      output = await this.cache.extractBuiltin.run(output);
+    }
+    output = await this.reduceEdges(output);
+    return output;
+  }
+
   async process(srcInput) {
     const input = { threshold: this.settings.threshold || 0.8, ...srcInput };
-    const result = await this.runPipeline(
-      input,
-      input.locale
-        ? `${this.settings.tag}-${input.locale}-process`
-        : this.pipelineProcess
-    );
+    let result;
+    if (input.locale) {
+      const pipeline = this.container.getPipeline(
+        `${this.settings.tag}-${input.locale}-process`
+      );
+      if (pipeline) {
+        result = await this.runPipeline(input, pipeline);
+      }
+    } else if (this.pipelineProcess) {
+      result = await this.runPipeline(input, this.pipelineProcess);
+    }
+    if (!result) {
+      result = await this.defaultPipelineProcess(input);
+    }
     delete result.threshold;
     return result;
   }

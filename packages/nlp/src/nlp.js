@@ -33,6 +33,7 @@ const {
 const { ActionManager, NlgManager } = require('@nlpjs/nlg');
 const { SentimentAnalyzer } = require('@nlpjs/sentiment');
 const { SlotManager } = require('@nlpjs/slot');
+const ContextManager = require('./context-manager');
 
 class Nlp extends Clonable {
   constructor(settings = {}, container) {
@@ -64,6 +65,14 @@ class Nlp extends Clonable {
       this.settings.sentiment
     );
     this.slotManager = this.container.get('SlotManager', this.settings.slot);
+    this.contextManager = this.container.get(
+      'context-manager',
+      this.settings.context
+    );
+    this.forceNER = this.settings.forceNER;
+    if (this.forceNER === undefined) {
+      this.forceNER = false;
+    }
     this.initialize();
   }
 
@@ -88,6 +97,7 @@ class Nlp extends Clonable {
     this.use(ActionManager);
     this.use(NluNeural);
     this.use(SentimentAnalyzer);
+    this.use(ContextManager);
     this.container.register('SlotManager', SlotManager, false);
   }
 
@@ -111,6 +121,9 @@ class Nlp extends Clonable {
     }
     if (this.settings.locales) {
       this.addLanguage(this.settings.locales);
+    }
+    if (this.settings.calculateSentiment === undefined) {
+      this.settings.calculateSentiment = true;
     }
   }
 
@@ -167,6 +180,10 @@ class Nlp extends Clonable {
 
   addLanguage(locales) {
     return this.nluManager.addLanguage(locales);
+  }
+
+  removeLanguage(locales) {
+    return this.nluManager.removeLanguage(locales);
   }
 
   addDocument(locale, utterance, intent) {
@@ -314,82 +331,124 @@ class Nlp extends Clonable {
     }
   }
 
+  addEntities(entities, locale) {
+    const keys = Object.keys(entities);
+    for (let i = 0; i < keys.length; i += 1) {
+      const entityName = keys[i];
+      let entity = entities[entityName];
+      if (typeof entity === 'string') {
+        entity = { regex: [entity] };
+      }
+      let finalLocale = entity.locale;
+      if (!finalLocale) {
+        finalLocale = locale || 'en';
+      }
+      if (typeof finalLocale === 'string') {
+        finalLocale = finalLocale.slice(0, 2);
+      }
+      if (entity.options) {
+        const optionNames = Object.keys(entity.options);
+        for (let j = 0; j < optionNames.length; j += 1) {
+          this.addNerRuleOptionTexts(
+            finalLocale,
+            entityName,
+            optionNames[j],
+            entity.options[optionNames[j]]
+          );
+        }
+      }
+      if (entity.regex) {
+        if (Array.isArray(entity.regex)) {
+          for (let j = 0; j < entity.regex.length; j += 1) {
+            this.addNerRegexRule(finalLocale, entityName, entity.regex[j]);
+          }
+        } else if (typeof entity.regex === 'string' && entity.regex.trim()) {
+          this.addNerRegexRule(finalLocale, entityName, entity.regex);
+        }
+      }
+      if (entity.trim) {
+        for (let j = 0; j < entity.trim.length; j += 1) {
+          this.addNerPositionCondition(
+            finalLocale,
+            entityName,
+            entity.trim[j].position,
+            entity.trim[j].words,
+            entity.trim[j].opts
+          );
+        }
+      }
+    }
+  }
+
+  addData(data, locale, domain) {
+    for (let i = 0; i < data.length; i += 1) {
+      const current = data[i];
+      const { intent, utterances, answers } = current;
+      for (let j = 0; j < utterances.length; j += 1) {
+        if (domain) {
+          this.assignDomain(locale, intent, domain.name);
+        }
+        this.addDocument(locale, utterances[j], intent);
+      }
+      if (answers) {
+        for (let j = 0; j < answers.length; j += 1) {
+          const answer = answers[j];
+          if (typeof answer === 'string') {
+            this.addAnswer(locale, intent, answer);
+          } else {
+            this.addAnswer(locale, intent, answer.answer, answer.opts);
+          }
+        }
+      }
+    }
+  }
+
   async addCorpus(fileName) {
     if (fileName.importer) {
       await this.addImported(fileName);
     } else {
       let corpus = fileName;
+      const fs = this.container.get('fs');
       if (typeof fileName === 'string') {
-        const fs = this.container.get('fs');
         const fileData = await fs.readFile(fileName);
         if (!fileData) {
           throw new Error(`Corpus not found "${fileName}"`);
         }
         corpus = typeof fileData === 'string' ? JSON.parse(fileData) : fileData;
       }
+      if (corpus.contextData) {
+        let { contextData } = corpus;
+        if (typeof corpus.contextData === 'string') {
+          contextData = JSON.parse(await fs.readFile(corpus.contextData));
+        }
+        const contextManager = this.container.get('context-manager');
+        const keys = Object.keys(contextData);
+        for (let i = 0; i < keys.length; i += 1) {
+          contextManager.defaultData[keys[i]] = contextData[keys[i]];
+        }
+      }
       if (corpus.domains) {
+        if (corpus.entities) {
+          this.addEntities(corpus.entities);
+        }
         for (let i = 0; i < corpus.domains.length; i += 1) {
           const domain = corpus.domains[i];
-          const { data } = domain;
-          const { locale } = domain;
+          const { data, entities } = domain;
+          const locale = domain.locale.slice(0, 2);
           this.addLanguage(locale);
-          for (let j = 0; j < data.length; j += 1) {
-            const intent = data[j];
-            const { utterances, answers } = intent;
-            for (let k = 0; k < utterances.length; k += 1) {
-              this.addDocument(locale, utterances[k], intent.name);
-              this.assignDomain(locale, intent.name, domain.name);
-            }
-            if (answers) {
-              for (let k = 0; k < answers.length; k += 1) {
-                this.addAnswer(locale, intent.name, answers[k]);
-              }
-            }
+          if (entities) {
+            this.addEntities(entities, locale);
           }
+          this.addData(data, locale, domain);
         }
       } else {
         const locale = corpus.locale.slice(0, 2);
         this.addLanguage(locale);
         const { data, entities } = corpus;
         if (entities) {
-          const keys = Object.keys(entities);
-          for (let i = 0; i < keys.length; i += 1) {
-            const entityName = keys[i];
-            const entity = entities[entityName];
-            if (!entity.type) {
-              entity.type = 'text';
-            }
-            if (entity.type === 'text') {
-              const options = entity.options || {};
-              const optionNames = Object.keys(options);
-              for (let j = 0; j < optionNames.length; j += 1) {
-                this.addNerRuleOptionTexts(
-                  locale,
-                  entityName,
-                  optionNames[j],
-                  options[optionNames[j]]
-                );
-              }
-            }
-          }
+          this.addEntities(entities, locale);
         }
-        for (let i = 0; i < data.length; i += 1) {
-          const current = data[i];
-          const { intent, utterances, answers } = current;
-          for (let j = 0; j < utterances.length; j += 1) {
-            this.addDocument(locale, utterances[j], intent);
-          }
-          if (answers) {
-            for (let j = 0; j < answers.length; j += 1) {
-              const answer = answers[j];
-              if (typeof answer === 'string') {
-                this.addAnswer(locale, intent, answers[j]);
-              } else {
-                this.addAnswer(locale, intent, answer.answer, answer.opts);
-              }
-            }
-          }
-        }
+        this.addData(data, locale);
       }
     }
   }
@@ -446,8 +505,37 @@ class Nlp extends Clonable {
     return output;
   }
 
-  async process(locale, utterance, context = {}, settings) {
+  organizeEntities(entities) {
+    const dict = {};
+    for (let i = 0; i < entities.length; i += 1) {
+      const entity = entities[i];
+      if (!dict[entity.entity]) {
+        dict[entity.entity] = [];
+      }
+      dict[entity.entity].push(entity);
+    }
+    const result = [];
+    Object.keys(dict).forEach((key) => {
+      const arr = dict[key];
+      if (arr.length === 1) {
+        result.push(arr[0]);
+      } else {
+        for (let i = 0; i < arr.length; i += 1) {
+          arr[i].alias = `${key}_${i}`;
+        }
+        result.push({
+          entity: key,
+          isList: true,
+          items: arr,
+        });
+      }
+    });
+    return result;
+  }
+
+  async process(locale, utterance, srcContext, settings) {
     let sourceInput;
+    let context = srcContext;
     if (typeof locale === 'object') {
       if (typeof utterance === 'object' && utterance.value) {
         locale = undefined;
@@ -456,19 +544,42 @@ class Nlp extends Clonable {
         sourceInput = locale;
       }
     }
-    if (sourceInput) {
+    if (!sourceInput) {
+      if (!utterance) {
+        utterance = locale;
+        locale = undefined;
+      }
+      if (!locale) {
+        locale = this.guessLanguage(utterance);
+      }
+      sourceInput = {
+        locale,
+        utterance,
+        settings,
+      };
+      if (settings) {
+        if (settings.activity && !sourceInput.activity) {
+          sourceInput.activity = settings.activity;
+        }
+        if (settings.conversationId && !sourceInput.activity) {
+          sourceInput.activity = {
+            conversation: {
+              id: settings.conversationId,
+            },
+          };
+        }
+      }
+    } else {
       locale = sourceInput.locale;
-      utterance = sourceInput.utterance || sourceInput.message;
-      context.channel = sourceInput.channel;
-      context.app = sourceInput.app;
+      utterance =
+        sourceInput.utterance || sourceInput.message || sourceInput.text;
     }
-    if (!utterance) {
-      utterance = locale;
-      locale = undefined;
+    if (!context) {
+      context = await this.contextManager.getContext(sourceInput);
     }
-    if (!locale) {
-      locale = this.guessLanguage(utterance);
-    }
+    context.channel = sourceInput.channel;
+    context.app = sourceInput.app;
+    context.from = sourceInput.from || null;
     const input = {
       locale,
       utterance,
@@ -476,25 +587,27 @@ class Nlp extends Clonable {
       settings: this.applySettings(settings, this.settings.nlu),
     };
     let output = await this.nluManager.process(input);
-    const optionalUtterance = await this.ner.generateEntityUtterance(
-      locale,
-      utterance
-    );
-    if (optionalUtterance && optionalUtterance !== utterance) {
-      const optionalInput = {
+    if (this.forceNER || !this.slotManager.isEmpty) {
+      const optionalUtterance = await this.ner.generateEntityUtterance(
         locale,
-        utterance: optionalUtterance,
-        context,
-        settings: this.applySettings(settings, this.settings.nlu),
-      };
-      const optionalOutput = await this.nluManager.process(optionalInput);
-      if (
-        optionalOutput &&
-        (optionalOutput.score > output.score || output.intent === 'None')
-      ) {
-        output = optionalOutput;
-        output.utterance = utterance;
-        output.optionalUtterance = optionalUtterance;
+        utterance
+      );
+      if (optionalUtterance && optionalUtterance !== utterance) {
+        const optionalInput = {
+          locale,
+          utterance: optionalUtterance,
+          context,
+          settings: this.applySettings(settings, this.settings.nlu),
+        };
+        const optionalOutput = await this.nluManager.process(optionalInput);
+        if (
+          optionalOutput &&
+          (optionalOutput.score > output.score || output.intent === 'None')
+        ) {
+          output = optionalOutput;
+          output.utterance = utterance;
+          output.optionalUtterance = optionalUtterance;
+        }
       }
     }
     if (output.score < this.settings.threshold) {
@@ -502,24 +615,69 @@ class Nlp extends Clonable {
       output.intent = 'None';
     }
     output.context = context;
-    output = await this.ner.process({ ...output });
+    if (this.forceNER || !this.slotManager.isEmpty) {
+      output = await this.ner.process({ ...output });
+    } else {
+      output.entities = [];
+      output.sourceEntities = [];
+    }
+    const stemmer = this.container.get(`stemmer-${output.locale}`);
+    if (stemmer && stemmer.lastFill) {
+      stemmer.lastFill(output);
+    }
+    const organizedEntities = this.organizeEntities(output.entities);
+    if (!output.context.entities) {
+      output.context.entities = {};
+    }
+    for (let i = 0; i < organizedEntities.length; i += 1) {
+      const entity = organizedEntities[i];
+      output.context.entities[entity.entity] = entity;
+      if (entity.isList) {
+        for (let j = 0; j < entity.items.length; j += 1) {
+          output.context[entity.items[j].alias] = entity.items[j].sourceText;
+        }
+      }
+      output.context[entity.entity] = entity.isList
+        ? entity.items[0].sourceText
+        : entity.sourceText;
+    }
     const answers = await this.nlgManager.run({ ...output });
     output.answers = answers.answers;
     output.answer = answers.answer;
     output = await this.actionManager.run({ ...output });
-    const sentiment = await this.getSentiment(locale, utterance);
-    output.sentiment = sentiment ? sentiment.sentiment : undefined;
-    if (this.slotManager.process(output, context)) {
-      output.entities.forEach((entity) => {
-        context[entity.entity] = entity.option || entity.utteranceText;
-      });
+    if (this.settings.calculateSentiment) {
+      const sentiment = await this.getSentiment(locale, utterance);
+      output.sentiment = sentiment ? sentiment.sentiment : undefined;
     }
-    context.slotFill = output.slotFill;
+    if (this.forceNER || !this.slotManager.isEmpty) {
+      if (this.slotManager.process(output, context)) {
+        output.entities.forEach((entity) => {
+          context[entity.entity] = entity.option || entity.utteranceText;
+        });
+      }
+      context.slotFill = output.slotFill;
+    }
+    await this.contextManager.setContext(sourceInput, context);
     delete output.context;
     delete output.settings;
     const result = sourceInput
       ? this.applySettings(sourceInput, output)
       : output;
+    if (result.intent === 'None' && !result.answer) {
+      const openQuestion = this.container.get('open-question');
+      if (openQuestion) {
+        const qnaAnswer = await openQuestion.getAnswer(
+          result.locale,
+          result.utterance
+        );
+        if (qnaAnswer && qnaAnswer.answer && qnaAnswer.answer.length > 0) {
+          result.answer = qnaAnswer.answer;
+          result.isOpenQuestionAnswer = true;
+          result.openQuestionFirstCharacter = qnaAnswer.position;
+          result.openQuestionScore = qnaAnswer.score;
+        }
+      }
+    }
     if (this.onIntent) {
       await this.onIntent(this, result);
     } else {

@@ -21,9 +21,8 @@
  * WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-const { Clonable } = require('@nlpjs/core');
+const { Clonable, compareWildcars } = require('@nlpjs/core');
 const { SpellCheck } = require('@nlpjs/similarity');
-const useNoneFeature = require('./none-languages');
 
 class Nlu extends Clonable {
   constructor(settings = {}, container) {
@@ -67,35 +66,64 @@ class Nlu extends Clonable {
       false
     );
     this.container.registerPipeline(
-      'nlu-??-prepare',
-      [
-        'normalize',
-        'tokenize',
-        'removeStopwords',
-        'stem',
-        'arrToObj',
-        'output.tokens',
-      ],
-      false
-    );
-    this.container.registerPipeline(
       'nlu-??-train',
       ['.prepareCorpus', '.addNoneFeature', '.innerTrain'],
       false
     );
-    this.container.registerPipeline(
-      'nlu-??-process',
-      [
-        '.prepare',
-        '.doSpellCheck',
-        '.textToFeatures',
-        '.innerProcess',
-        '.convertToArray',
-        '.filterNonActivated',
-        '.normalizeClassifications',
-      ],
-      false
-    );
+  }
+
+  async defaultPipelinePrepare(input) {
+    let result;
+    if (this.cache) {
+      const now = new Date();
+      const diff = Math.abs(now.getTime() - this.cache.created) / 3600000;
+      if (diff > 1) {
+        this.cache.results = {};
+        this.cache.created = new Date().getTime();
+      }
+    }
+    if (!this.cache) {
+      this.cache = {
+        created: new Date().getTime(),
+        results: {},
+        normalize: this.container.get('normalize'),
+        tokenize: this.container.get('tokenize'),
+        removeStopwords: this.container.get('removeStopwords'),
+        stem: this.container.get('stem'),
+        arrToObj: this.container.get('arrToObj'),
+      };
+    } else if (this.cache.results[input.settings.locale]) {
+      result = this.cache.results[input.settings.locale][
+        input.text || input.utterance
+      ];
+      if (result) {
+        return result;
+      }
+    }
+    let output = input;
+    output = this.cache.normalize.run(output);
+    output = await this.cache.tokenize.run(output);
+    output = this.cache.removeStopwords.run(output);
+    output = await this.cache.stem.run(output);
+    output = this.cache.arrToObj.run(output);
+    result = output.tokens;
+    if (!this.cache.results[input.settings.locale]) {
+      this.cache.results[input.settings.locale] = {};
+    }
+    this.cache.results[input.settings.locale][
+      input.text || input.utterance
+    ] = result;
+    return result;
+  }
+
+  async defaultPipelineProcess(input) {
+    let output = await this.prepare(input);
+    output = await this.doSpellCheck(output);
+    output = await this.textToFeatures(output);
+    output = await this.innerProcess(output);
+    output = await this.filterNonActivated(output);
+    output = await this.normalizeClassifications(output);
+    return output;
   }
 
   async prepare(text, srcSettings) {
@@ -106,7 +134,10 @@ class Nlu extends Clonable {
         text,
         settings,
       };
-      return this.runPipeline(input, this.pipelinePrepare);
+      if (this.pipelinePrepare) {
+        return this.runPipeline(input, this.pipelinePrepare);
+      }
+      return this.defaultPipelinePrepare(input);
     }
     if (typeof text === 'object') {
       if (Array.isArray(text)) {
@@ -193,7 +224,6 @@ class Nlu extends Clonable {
         }
         this.featuresToIntent[feature].push(intent);
       }
-      this.intentFeatures[keys[i]] = Object.keys(this.intentFeatures[keys[i]]);
     }
     this.spellCheck.setFeatures(this.features);
     this.numFeatures = Object.keys(this.features).length;
@@ -204,12 +234,7 @@ class Nlu extends Clonable {
 
   addNoneFeature(input) {
     const { corpus } = input;
-    const locale = input.locale || this.settings.locale;
-    if (
-      (input.settings && input.settings.useNoneFeature) ||
-      ((!input.settings || input.settings.useNoneFeature === undefined) &&
-        useNoneFeature[locale])
-    ) {
+    if (input.settings && input.settings.useNoneFeature) {
       corpus.push({ input: { nonefeature: 1 }, output: { None: 1 } });
     }
     return input;
@@ -238,6 +263,9 @@ class Nlu extends Clonable {
           result.push({ intent, score });
         }
       }
+      if (!result.length) {
+        result.push({ intent: 'None', score: 1 });
+      }
       input.classifications = result.sort((a, b) => b.score - a.score);
     }
     return input;
@@ -252,31 +280,58 @@ class Nlu extends Clonable {
     return false;
   }
 
-  getAllowList(tokens) {
-    const result = {};
-    const features = Object.keys(tokens);
-    for (let i = 0; i < features.length; i += 1) {
-      const intents = this.featuresToIntent[features[i]];
-      if (intents) {
-        for (let j = 0; j < intents.length; j += 1) {
-          result[intents[j]] = 1;
-        }
+  matchAllowList(intent, allowList) {
+    for (let i = 0; i < allowList.length; i += 1) {
+      if (compareWildcars(intent, allowList[i])) {
+        return true;
       }
     }
-    return result;
+    return false;
+  }
+
+  intentIsActivated(intent, tokens, allowList) {
+    if (allowList) {
+      if (Array.isArray(allowList)) {
+        return this.matchAllowList(intent, allowList);
+      }
+      if (!allowList[intent]) {
+        return false;
+      }
+    }
+    const features = this.intentFeatures[intent];
+    if (!features) {
+      return false;
+    }
+    const keys = Object.keys(tokens);
+    for (let i = 0; i < keys.length; i += 1) {
+      if (features[keys[i]]) {
+        return true;
+      }
+    }
+    return false;
   }
 
   filterNonActivated(srcInput) {
-    if (!this.intentFeatures || !srcInput.classifications) {
-      return srcInput;
-    }
-    const allowList = this.getAllowList(srcInput.tokens);
-    allowList.None = 1;
-    const { classifications } = srcInput;
-    for (let i = 0; i < classifications.length; i += 1) {
-      const classification = classifications[i];
-      if (!allowList[classification.intent]) {
-        classification.score = 0;
+    if (this.intentFeatures && srcInput.classifications) {
+      const intents = srcInput.classifications.map((x) => x.intent);
+      let someModified = false;
+      for (let i = 0; i < intents.length; i += 1) {
+        const intent = intents[i];
+        if (intent !== 'None') {
+          if (
+            !this.intentIsActivated(
+              intent,
+              srcInput.tokens,
+              srcInput.settings.allowList
+            )
+          ) {
+            srcInput.classifications[i].score = 0;
+            someModified = true;
+          }
+        }
+      }
+      if (someModified) {
+        srcInput.classifications.sort((a, b) => b.score - a.score);
       }
     }
     return srcInput;
@@ -303,7 +358,6 @@ class Nlu extends Clonable {
   }
 
   textToFeatures(srcInput) {
-    const locale = srcInput.locale || this.settings.locale;
     const input = srcInput;
     const { tokens } = input;
     const keys = Object.keys(tokens);
@@ -328,13 +382,7 @@ class Nlu extends Clonable {
       nonevalue += nonedelta;
       nonedelta *= this.settings.nonedeltaMultiplier;
     }
-    if (
-      (input.settings ||
-        input.settings.useNoneFeature ||
-        ((input.settings || input.settings.useNoneFeature === undefined) &&
-          useNoneFeature[locale])) &&
-      nonevalue
-    ) {
+    if (input.settings && input.settings.useNoneFeature && nonevalue) {
       features.nonefeature = nonevalue;
     }
     input.tokens = features;
@@ -384,7 +432,12 @@ class Nlu extends Clonable {
       text: utterance,
       settings: this.applySettings(settings || {}, this.settings),
     };
-    const output = await this.runPipeline(input, this.pipelineProcess);
+    let output;
+    if (this.pipelineProcess) {
+      output = await this.runPipeline(input, this.pipelineProcess);
+    } else {
+      output = await this.defaultPipelineProcess(input);
+    }
     if (Array.isArray(output.classifications)) {
       const explanation = input.settings.returnExplanation
         ? await this.getExplanation(input, output.explanation)

@@ -343,6 +343,21 @@ const {
 } = require('@nlpjs/lang-zh');
 const LangAll = require('./lang-all');
 
+const {
+  langDict,
+  getNormalizer,
+  getTokenizer,
+  getStemmer,
+  getStopwords,
+  getSentiment,
+  normalize,
+  tokenize,
+  stem,
+  removeStopwords,
+  dict,
+  bow,
+} = require('./lang-functions');
+
 module.exports = {
   LangAll,
 
@@ -625,4 +640,17 @@ module.exports = {
   StemmerZh,
   StopwordsZh,
   TokenizerZh,
+
+  langDict,
+  getNormalizer,
+  getTokenizer,
+  getStemmer,
+  getStopwords,
+  getSentiment,
+  normalize,
+  tokenize,
+  stem,
+  removeStopwords,
+  dict,
+  bow,
 };

@@ -1,0 +1,42 @@
+{
+  "name": "@nlpjs/bot",
+  "version": "4.22.0",
+  "description": "Bot plugin for NLP.js",
+  "author": {
+    "email": "jesus.seijas@axa.com",
+    "name": "Jesús Seijas"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/axa-group/nlp.js.git"
+  },
+  "bugs": {
+    "url": "https://github.com/axa-group/nlp.js/issues"
+  },
+  "maintainers": [
+    {
+      "email": "jesus.seijas@axa.com",
+      "name": "Jesús Seijas"
+    },
+    {
+      "email": "jesus.seijas@axa.com",
+      "name": "Jesus Seijas"
+    }
+  ],
+  "license": "MIT",
+  "main": "src/index.js",
+  "scripts": {
+    "test": "echo \"Error: run tests from root\" && exit 1"
+  },
+  "dependencies": {
+    "@nlpjs/builtin-default": "^4.22.0",
+    "@nlpjs/connector": "^4.22.0",
+    "@nlpjs/core": "^4.22.0",
+    "@nlpjs/evaluator": "^4.21.1",
+    "@nlpjs/nlp": "^4.22.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "gitHead": "926fe345330eca1a13eaaf04d0bba3631a5bba8b"
+}

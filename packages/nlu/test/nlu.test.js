@@ -112,6 +112,17 @@ describe('NLU', () => {
         intent: 'mouse',
       });
     });
+    test('Prepare can be called twice', async () => {
+      const nlu = new Nlu({ locale: 'en', keepStopwords: false }, container);
+      const input = { utterance: 'Allí hay un ratón', intent: 'mouse' };
+      let actual = await nlu.prepare(input);
+      actual = await nlu.prepare(input);
+      expect(actual).toEqual({
+        utterance: 'Allí hay un ratón',
+        tokens: { alli: 1, hay: 1, un: 1, raton: 1 },
+        intent: 'mouse',
+      });
+    });
     test('Prepare can process an array of objects with text', async () => {
       const nlu = new Nlu({ locale: 'en', keepStopwords: false }, container);
       const input = [
@@ -233,12 +244,32 @@ describe('NLU', () => {
   describe('Add None Feature', () => {
     test('It should add a nonefeature input labeled as None', () => {
       const nlu = new Nlu({ locale: 'en', keepStopwords: false }, container);
-      const actual = nlu.addNoneFeature({ corpus: [] });
+      const actual = nlu.addNoneFeature({
+        corpus: [],
+        settings: { useNoneFeature: true },
+      });
       expect(actual.corpus).toHaveLength(1);
       expect(actual.corpus[0]).toEqual({
         input: { nonefeature: 1 },
         output: { None: 1 },
       });
+    });
+  });
+
+  describe('Some similar', () => {
+    test('It should return false if items in array does not exists in dictionary', () => {
+      const dict = { this: 1, is: 1, a: 1, cat: 1 };
+      const arr = ['not', 'two', 'dogs'];
+      const nlu = new Nlu({ locale: 'en', keepStopwords: false }, container);
+      const actual = nlu.someSimilar(dict, arr);
+      expect(actual).toBeFalsy();
+    });
+    test('It should return false if at least one item in array exists in dictionary', () => {
+      const dict = { this: 1, is: 1, a: 1, cat: 1 };
+      const arr = ['not', 'a', 'cat'];
+      const nlu = new Nlu({ locale: 'en', keepStopwords: false }, container);
+      const actual = nlu.someSimilar(dict, arr);
+      expect(actual).toBeTruthy();
     });
   });
 });

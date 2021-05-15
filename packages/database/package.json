@@ -1,6 +1,6 @@
 {
   "name": "@nlpjs/database",
-  "version": "4.7.4",
+  "version": "4.22.0",
   "description": "Base Database for NLP.js",
   "author": {
     "email": "jesus.seijas@axa.com",
@@ -25,10 +25,10 @@
     "test": "echo \"Error: run tests from root\" && exit 1"
   },
   "dependencies": {
-    "@nlpjs/core": "^4.6.0"
+    "@nlpjs/core": "^4.22.0"
   },
   "publishConfig": {
     "access": "public"
   },
-  "gitHead": "0940a8c5fee7da099d44174136fa76914933b819"
+  "gitHead": "2b77e4ff0126eaac349c2cad852036e282323519"
 }

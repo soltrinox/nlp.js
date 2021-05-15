@@ -77,11 +77,6 @@ expect.extend({
 
 function addTests(base, locale) {
   const instance = new BuiltinMicrosoft({ container });
-  // const input = {
-  //   utterance: 'I had 500 reasons to not go tomorrow',
-  //   locale: 'en',
-  // };
-
   for (let i = 0; i < base.length; i += 1) {
     const testCase = base[i];
     const keys = Object.keys(testCase);
@@ -107,6 +102,7 @@ function addTests(base, locale) {
       const utterance = testCase[utteranceName] || testCase.utterance;
       const resultName = `result${upperLocale}`;
       if (utterance) {
+        // eslint-disable-next-line jest/valid-title
         test(utterance, async () => {
           const expected = Object.assign(testCase.result, testCase[resultName]);
           const input = {

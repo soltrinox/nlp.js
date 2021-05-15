@@ -27,7 +27,7 @@ const { Clonable } = require('@nlpjs/core');
 const idField = '_id';
 
 class MongodbAdapter extends Clonable {
-  constructor(settings = {}, container) {
+  constructor(settings = {}, container = undefined) {
     super(
       {
         settings: {},
@@ -51,6 +51,17 @@ class MongodbAdapter extends Clonable {
       useNewUrlParser: true,
       useUnifiedTopology: true,
     });
+    this.registerDefault();
+  }
+
+  registerDefault() {
+    const database = this.container
+      ? this.container.get('database')
+      : undefined;
+    if (database) {
+      database.registerAdapter('mongodb', this);
+      database.defaultAdapter = 'mongodb';
+    }
   }
 
   connect() {
@@ -123,7 +134,7 @@ class MongodbAdapter extends Clonable {
     });
   }
 
-  async find(name, condition = {}, limit, offset, sort) {
+  async find(name, condition, limit, offset, sort) {
     return this.executeInCollection(name, (collection, cb) => {
       const options = {};
       if (limit) {
@@ -135,7 +146,7 @@ class MongodbAdapter extends Clonable {
       if (sort) {
         options.sort = sort;
       }
-      collection.find(condition, options).toArray((err, result) => {
+      collection.find(condition || {}, options).toArray((err, result) => {
         if (err) {
           return cb(err);
         }

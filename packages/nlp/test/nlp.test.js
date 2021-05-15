@@ -23,11 +23,38 @@
 
 const { Nlp } = require('../src');
 
+const defaultCorpus = {
+  name: 'corpus',
+  locale: 'en-US',
+  data: [
+    {
+      intent: 'greet',
+      utterances: ['hello', 'hi', 'good morning', 'good night'],
+      answers: ['Hello user!'],
+    },
+    {
+      intent: 'bye',
+      utterances: ['see you later', 'bye', 'goodbye'],
+      answers: ['Bye user!'],
+    },
+  ],
+};
+
 describe('NLP', () => {
   describe('Constructor', () => {
-    test('Constructor', () => {
+    test('It should create a new instance', () => {
       const nlp = new Nlp();
       expect(nlp).toBeDefined();
+    });
+    test('It should create default object structure', () => {
+      const nlp = new Nlp();
+      expect(nlp.contextManager).toBeDefined();
+      expect(nlp.slotManager).toBeDefined();
+      expect(nlp.sentiment).toBeDefined();
+      expect(nlp.actionManager).toBeDefined();
+      expect(nlp.nlgManager).toBeDefined();
+      expect(nlp.ner).toBeDefined();
+      expect(nlp.nluManager).toBeDefined();
     });
   });
 
@@ -330,6 +357,226 @@ describe('NLP', () => {
         ],
       });
     });
+
+    test('addEntities using a single rule for each entity covering all rule types and regexp import as string', async () => {
+      const nlp = new Nlp({ forceNER: true });
+      nlp.addEntities({
+        regex_all_string: '/[0-9]/gi',
+        regex_string: { regex: '/[0-9]/gi' },
+        regex_array: { regex: ['/[0-9]/gi'] },
+        options_array: { options: { spiderman: ['spiderman', 'spider-man'] } },
+        trim_array: {
+          trim: [
+            {
+              position: 'after',
+              words: ['from'],
+              opts: { caseSensitive: true },
+            },
+          ],
+        },
+      });
+      expect(nlp.ner.rules.en).toEqual({
+        regex_all_string: {
+          name: 'regex_all_string',
+          type: 'regex',
+          rules: [/[0-9]/gi],
+        },
+        regex_string: {
+          name: 'regex_string',
+          type: 'regex',
+          rules: [/[0-9]/gi],
+        },
+        regex_array: {
+          name: 'regex_array',
+          type: 'regex',
+          rules: [/[0-9]/gi],
+        },
+        options_array: {
+          name: 'options_array',
+          type: 'enum',
+          rules: [{ option: 'spiderman', texts: ['spiderman', 'spider-man'] }],
+        },
+        trim_array: {
+          name: 'trim_array',
+          type: 'trim',
+          rules: [
+            {
+              type: 'after',
+              words: ['from'],
+              options: { caseSensitive: true },
+            },
+          ],
+        },
+      });
+    });
+
+    test('addEntities then process', async () => {
+      let p = null;
+      let nlp = null;
+
+      // TRIM
+      nlp = new Nlp({ forceNER: true });
+      nlp.addEntities({
+        trim_array: {
+          trim: [
+            {
+              position: 'after',
+              words: ['from'],
+              opts: { caseSensitive: true },
+            },
+          ],
+        },
+      });
+
+      p = await nlp.process(
+        'en',
+        '8 days ago i saw spider-man coming from heaven'
+      );
+      expect(p.entities).toEqual([
+        {
+          type: 'trim',
+          subtype: 'after',
+          start: 40,
+          end: 45,
+          len: 6,
+          accuracy: 0.99,
+          sourceText: 'heaven',
+          utteranceText: 'heaven',
+          entity: 'trim_array',
+        },
+      ]);
+
+      // OPTIONS
+      nlp = new Nlp({ forceNER: true });
+      nlp.addEntities({
+        options_array: { options: { spiderman: ['spiderman', 'spider-man'] } },
+      });
+
+      p = await nlp.process(
+        'en',
+        '8 days ago i saw spider-man coming from heaven'
+      );
+      expect(p.entities).toEqual([
+        {
+          start: 17,
+          end: 26,
+          len: 10,
+          levenshtein: 0,
+          accuracy: 1,
+          entity: 'options_array',
+          type: 'enum',
+          option: 'spiderman',
+          sourceText: 'spider-man',
+          utteranceText: 'spider-man',
+        },
+      ]);
+
+      // TRIM AND OPTIONS
+      nlp = new Nlp({ forceNER: true });
+      nlp.addEntities({
+        mixed: {
+          options: { spiderman: ['spiderman', 'spider-man'] },
+          trim: [
+            {
+              position: 'after',
+              words: ['from'],
+              opts: { caseSensitive: true },
+            },
+          ],
+        },
+      });
+
+      p = await nlp.process(
+        'en',
+        '8 days ago i saw spider-man coming from heaven'
+      );
+      expect(p.entities).toEqual([
+        {
+          start: 17,
+          end: 26,
+          len: 10,
+          levenshtein: 0,
+          accuracy: 1,
+          entity: 'mixed',
+          alias: 'mixed_0',
+          type: 'enum',
+          option: 'spiderman',
+          sourceText: 'spider-man',
+          utteranceText: 'spider-man',
+        },
+        {
+          type: 'trim',
+          subtype: 'after',
+          start: 40,
+          end: 45,
+          len: 6,
+          accuracy: 0.99,
+          sourceText: 'heaven',
+          utteranceText: 'heaven',
+          entity: 'mixed',
+          alias: 'mixed_1',
+        },
+      ]);
+
+      // TRIM AND OPTIONS and regexp
+      nlp = new Nlp({ forceNER: true });
+      nlp.addEntities({
+        mixed: {
+          options: { spiderman: ['spiderman', 'spider-man'] },
+          trim: [
+            {
+              position: 'after',
+              words: ['from'],
+              opts: { caseSensitive: true },
+            },
+          ],
+          regex: ['/[0-9]/gi'],
+        },
+      });
+
+      p = await nlp.process(
+        'en',
+        '8 days ago i saw spider-man coming from heaven'
+      );
+      expect(p.entities).toEqual([
+        {
+          start: 0,
+          end: 0,
+          accuracy: 1,
+          sourceText: '8',
+          entity: 'mixed',
+          type: 'enum',
+          utteranceText: '8',
+          len: 1,
+          alias: 'mixed_0',
+        },
+        {
+          start: 17,
+          end: 26,
+          len: 10,
+          levenshtein: 0,
+          accuracy: 1,
+          entity: 'mixed',
+          type: 'enum',
+          option: 'spiderman',
+          sourceText: 'spider-man',
+          utteranceText: 'spider-man',
+          alias: 'mixed_1',
+        },
+        {
+          type: 'trim',
+          subtype: 'after',
+          start: 40,
+          end: 45,
+          len: 6,
+          accuracy: 0.99,
+          sourceText: 'heaven',
+          utteranceText: 'heaven',
+          entity: 'mixed',
+          alias: 'mixed_2',
+        },
+      ]);
+    });
   });
 
   describe('Remove NER rule option texts', () => {
@@ -484,6 +731,344 @@ describe('NLP', () => {
           },
         ],
       });
+    });
+  });
+
+  describe('Process an utterance', () => {
+    test('When the input contains `from.id` do not crash', async () => {
+      const nlp = new Nlp();
+      const input = {
+        locale: 'en',
+        utterance: 'Who am i?',
+        from: { id: 'jo.bloggs@example.org', name: 'Jo', role: 'user' },
+      };
+      const output = await nlp.process(input);
+      expect(output.utterance).toEqual(input.utterance);
+      expect(output.intent).toEqual('None');
+      expect(output.answer).toBeUndefined();
+      expect(output.from.id).toEqual(input.from.id);
+    });
+  });
+
+  describe('addCorpus', () => {
+    test('A corpus can be added as a json', async () => {
+      const nlp = new Nlp();
+      await nlp.addCorpus(defaultCorpus);
+      expect(nlp.nluManager.domainManagers.en.sentences).toHaveLength(7);
+    });
+    test('A corpus with domains can be added as a json', async () => {
+      const corpus = {
+        name: 'corpus',
+        locale: 'en-US',
+        domains: [
+          {
+            name: 'domain1',
+            locale: 'en-US',
+            data: [
+              {
+                intent: 'greet',
+                utterances: ['hello', 'hi', 'good morning', 'good night'],
+                answers: ['Hello user!'],
+              },
+            ],
+          },
+          {
+            name: 'domain2',
+            locale: 'en-US',
+            data: [
+              {
+                intent: 'bye',
+                utterances: ['see you later', 'bye', 'goodbye'],
+                answers: ['Bye user!'],
+              },
+            ],
+          },
+        ],
+      };
+      const nlp = new Nlp();
+      await nlp.addCorpus(corpus);
+      expect(nlp.nluManager.domainManagers.en.sentences[0].domain).toEqual(
+        'domain1'
+      );
+      expect(nlp.nluManager.domainManagers.en.sentences[1].domain).toEqual(
+        'domain1'
+      );
+      expect(nlp.nluManager.domainManagers.en.sentences[2].domain).toEqual(
+        'domain1'
+      );
+      expect(nlp.nluManager.domainManagers.en.sentences[3].domain).toEqual(
+        'domain1'
+      );
+      expect(nlp.nluManager.domainManagers.en.sentences[4].domain).toEqual(
+        'domain2'
+      );
+      expect(nlp.nluManager.domainManagers.en.sentences[5].domain).toEqual(
+        'domain2'
+      );
+      expect(nlp.nluManager.domainManagers.en.sentences[6].domain).toEqual(
+        'domain2'
+      );
+    });
+
+    test('The corpus can contain entities', async () => {
+      const corpus = {
+        name: 'corpus',
+        locale: 'en-US',
+        data: [
+          {
+            intent: 'greet',
+            utterances: ['hello', 'hi', 'good morning', 'good night'],
+            answers: ['Hello user!'],
+          },
+          {
+            intent: 'bye',
+            utterances: ['see you later', 'bye', 'goodbye'],
+            answers: ['Bye user!'],
+          },
+        ],
+        entities: {
+          hero: {
+            locale: ['en', 'es'],
+            type: 'text',
+            options: {
+              spiderman: ['spiderman', 'spider-man'],
+              ironman: ['ironman', 'iron-man'],
+              thor: ['thor'],
+            },
+          },
+          email: {
+            locale: ['en', 'es'],
+            regex: '/\\b(\\w[-._\\w]*\\w@\\w[-._\\w]*\\w\\.\\w{2,3})\\b/gi',
+          },
+        },
+      };
+      const nlp = new Nlp();
+      await nlp.addCorpus(corpus);
+      expect(nlp.ner.rules.en).toBeDefined();
+      expect(nlp.ner.rules.es).toBeDefined();
+      expect(nlp.ner.rules.en.hero).toBeDefined();
+      expect(nlp.ner.rules.en.email).toBeDefined();
+      expect(nlp.ner.rules.es.hero).toBeDefined();
+      expect(nlp.ner.rules.es.email).toBeDefined();
+    });
+  });
+
+  describe('addCorpora', () => {
+    test('A corpora can be added as a json', async () => {
+      const nlp = new Nlp();
+      await nlp.addCorpora([defaultCorpus]);
+      expect(nlp.nluManager.domainManagers.en.sentences).toHaveLength(7);
+    });
+    test('A corpora can be added as a json but not an array', async () => {
+      const nlp = new Nlp();
+      await nlp.addCorpora(defaultCorpus);
+      expect(nlp.nluManager.domainManagers.en.sentences).toHaveLength(7);
+    });
+    test('If corpora is not defined, it should not crash', async () => {
+      const nlp = new Nlp();
+      await nlp.addCorpora();
+      expect(nlp.nluManager).toBeDefined();
+    });
+  });
+
+  describe('addNerBetweenCondition', () => {
+    test('It should extract a between rule', async () => {
+      const nlp = new Nlp({ forceNER: true });
+      nlp.addNerBetweenCondition('en', 'entity', 'from', 'to');
+      const input = {
+        locale: 'en',
+        text: 'I have to go from Madrid to Barcelona',
+      };
+      const actual = await nlp.process(input);
+      expect(actual.entities).toEqual([
+        {
+          start: 18,
+          end: 23,
+          accuracy: 1,
+          sourceText: 'Madrid',
+          entity: 'entity',
+          type: 'trim',
+          subtype: 'between',
+          utteranceText: 'Madrid',
+          len: 6,
+        },
+      ]);
+    });
+  });
+
+  describe('addNerBeforeCondition', () => {
+    test('It should extract a before rule', async () => {
+      const nlp = new Nlp({ forceNER: true });
+      nlp.addNerBeforeCondition('en', 'entity', 'from');
+      const input = {
+        locale: 'en',
+        text: 'I have to go from Madrid from Barcelona',
+      };
+      const actual = await nlp.process(input);
+      expect(actual.entities).toEqual([
+        {
+          type: 'trim',
+          subtype: 'before',
+          start: 0,
+          end: 11,
+          len: 12,
+          accuracy: 0.99,
+          sourceText: 'I have to go',
+          utteranceText: 'I have to go',
+          entity: 'entity',
+          alias: 'entity_0',
+        },
+        {
+          type: 'trim',
+          subtype: 'before',
+          start: 18,
+          end: 23,
+          len: 6,
+          accuracy: 0.99,
+          sourceText: 'Madrid',
+          utteranceText: 'Madrid',
+          entity: 'entity',
+          alias: 'entity_1',
+        },
+      ]);
+    });
+  });
+
+  describe('addNerBeforeLastCondition', () => {
+    test('It should extract a before last rule', async () => {
+      const nlp = new Nlp({ forceNER: true });
+      nlp.addNerBeforeLastCondition('en', 'entity', 'from');
+      const input = {
+        locale: 'en',
+        text: 'I have to go from Madrid from Barcelona',
+      };
+      const actual = await nlp.process(input);
+      expect(actual.entities).toEqual([
+        {
+          type: 'trim',
+          subtype: 'beforeLast',
+          start: 0,
+          end: 23,
+          len: 24,
+          accuracy: 0.99,
+          sourceText: 'I have to go from Madrid',
+          utteranceText: 'I have to go from Madrid',
+          entity: 'entity',
+        },
+      ]);
+    });
+  });
+
+  describe('addNerBeforeFirstCondition', () => {
+    test('It should extract a before first rule', async () => {
+      const nlp = new Nlp({ forceNER: true });
+      nlp.addNerBeforeFirstCondition('en', 'entity', 'from');
+      const input = {
+        locale: 'en',
+        text: 'I have to go from Madrid from Barcelona',
+      };
+      const actual = await nlp.process(input);
+      expect(actual.entities).toEqual([
+        {
+          type: 'trim',
+          subtype: 'beforeFirst',
+          start: 0,
+          end: 11,
+          len: 12,
+          accuracy: 0.99,
+          sourceText: 'I have to go',
+          utteranceText: 'I have to go',
+          entity: 'entity',
+        },
+      ]);
+    });
+  });
+
+  describe('addNerAfterCondition', () => {
+    test('It should extract a get after rule', async () => {
+      const nlp = new Nlp({ forceNER: true });
+      nlp.addNerAfterCondition('en', 'entity', 'from');
+      const input = {
+        locale: 'en',
+        text: 'I have to go from Madrid from Barcelona',
+      };
+      const actual = await nlp.process(input);
+      expect(actual.entities).toEqual([
+        {
+          type: 'trim',
+          subtype: 'after',
+          start: 18,
+          end: 23,
+          len: 6,
+          accuracy: 0.99,
+          sourceText: 'Madrid',
+          utteranceText: 'Madrid',
+          entity: 'entity',
+          alias: 'entity_0',
+        },
+        {
+          type: 'trim',
+          subtype: 'after',
+          start: 30,
+          end: 38,
+          len: 9,
+          accuracy: 0.99,
+          sourceText: 'Barcelona',
+          utteranceText: 'Barcelona',
+          entity: 'entity',
+          alias: 'entity_1',
+        },
+      ]);
+    });
+  });
+
+  describe('addNerAfterFirstCondition', () => {
+    test('It should extract a get after first rule', async () => {
+      const nlp = new Nlp({ forceNER: true });
+      nlp.addNerAfterFirstCondition('en', 'entity', 'from');
+      const input = {
+        locale: 'en',
+        text: 'I have to go from Madrid from Barcelona',
+      };
+      const actual = await nlp.process(input);
+      expect(actual.entities).toEqual([
+        {
+          type: 'trim',
+          subtype: 'afterFirst',
+          start: 18,
+          end: 38,
+          len: 21,
+          accuracy: 0.99,
+          sourceText: 'Madrid from Barcelona',
+          utteranceText: 'Madrid from Barcelona',
+          entity: 'entity',
+        },
+      ]);
+    });
+  });
+
+  describe('addNerAfterLastCondition', () => {
+    test('It should extract a get after last rule', async () => {
+      const nlp = new Nlp({ forceNER: true });
+      nlp.addNerAfterLastCondition('en', 'entity', 'from');
+      const input = {
+        locale: 'en',
+        text: 'I have to go from Madrid from Barcelona',
+      };
+      const actual = await nlp.process(input);
+      expect(actual.entities).toEqual([
+        {
+          type: 'trim',
+          subtype: 'afterLast',
+          start: 30,
+          end: 38,
+          len: 9,
+          accuracy: 0.99,
+          sourceText: 'Barcelona',
+          utteranceText: 'Barcelona',
+          entity: 'entity',
+        },
+      ]);
     });
   });
 });

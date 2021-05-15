@@ -235,7 +235,7 @@ class BuiltinMicrosoft extends Clonable {
       return {
         strValue: resolution.value,
         value: Number.parseFloat(resolution.value),
-        unit: resolution.unit,
+        unit: resolution.unit || resolution.srcUnit,
         localeUnit: resolution.srcUnit,
       };
     }
@@ -251,6 +251,15 @@ class BuiltinMicrosoft extends Clonable {
           if (!other.discarded) {
             if (other.start === edge.start && other.end === edge.end) {
               if (other.entity === 'number' && edge.entiy === 'ordinal') {
+                other.discarded = true;
+              } else if (
+                other.entity === edge.entity &&
+                other.accuracy === edge.accuracy &&
+                ((!edge.resolution && !other.resolution) ||
+                  (edge.resolution &&
+                    other.resolution &&
+                    edge.resolution.subtype === other.resolution.subtype))
+              ) {
                 other.discarded = true;
               } else if (
                 other.entity === 'ordinal' &&
@@ -292,13 +301,17 @@ class BuiltinMicrosoft extends Clonable {
     return result;
   }
 
-  findBuiltinEntities(utterance, locale) {
+  findBuiltinEntities(utterance, locale, srcBuiltins) {
     const result = [];
     const source = [];
     const culture = getCulture(locale);
-    this.settings.builtins.forEach((name) => {
+    const builtins = srcBuiltins || this.settings.builtins;
+    builtins.forEach((name) => {
       try {
-        const entities = Recognizers[`recognize${name}`](utterance, culture);
+        const entities =
+          name === 'Currency' && locale === 'pt'
+            ? Recognizers[`recognize${name}`](utterance, getCulture('en'))
+            : Recognizers[`recognize${name}`](utterance, culture);
         if (name === 'Number' && locale !== 'en') {
           entities.push(
             ...Recognizers.recognizeNumber(utterance, getCulture('en'))
@@ -346,7 +359,8 @@ class BuiltinMicrosoft extends Clonable {
     const input = srcInput;
     const entities = this.findBuiltinEntities(
       input.text || input.utterance,
-      input.locale
+      input.locale,
+      input.builtins
     );
     if (!input.edges) {
       input.edges = [];

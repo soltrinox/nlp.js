@@ -55,16 +55,6 @@ describe('Neural Network', () => {
       expect(actual.developer).toEqual(0);
       expect(actual.birthday).toBeGreaterThan(0.75);
     });
-    test('Train and run with fixed error', () => {
-      const net = new NeuralNetwork({
-        fixedError: true,
-      });
-      net.train(corpus);
-      const actual = net.run({ when: 1, birthday: 1 });
-      expect(actual.who).toEqual(0);
-      expect(actual.developer).toEqual(0);
-      expect(actual.birthday).toBeGreaterThan(0.75);
-    });
     test('Train process can be logged', () => {
       const net = new NeuralNetwork({ log: true });
       net.train(corpus);
@@ -111,9 +101,9 @@ describe('Neural Network', () => {
       net.train(corpus);
       const explanation = net.explain({ when: 1, birthday: 1 }, 'birthday');
       expect(explanation.weights).toBeDefined();
-      expect(explanation.weights.when).toEqual(4.578855037689209);
-      expect(explanation.weights.birthday).toEqual(3.949134349822998);
-      expect(explanation.bias).toEqual(1.4713854180518258);
+      expect(explanation.weights.when).toEqual(5.242532253265381);
+      expect(explanation.weights.birthday).toEqual(4.492748260498047);
+      expect(explanation.bias).toEqual(1.6587271811334132);
     });
   });
 });

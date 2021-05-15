@@ -62,7 +62,6 @@ class ExtractorEnum {
               len: 1,
             });
             lastIndex = currentIndex;
-            atWhiteSpace = true;
           } else {
             lastIndex = currentIndex;
             atWhiteSpace = false;
@@ -183,7 +182,7 @@ class ExtractorEnum {
     if (!allRules) {
       return [];
     }
-    return allRules.filter((x) => x.type === 'enum');
+    return allRules;
   }
 
   normalize(str) {
@@ -195,17 +194,21 @@ class ExtractorEnum {
 
   buildRuleDict(rule) {
     const dict = {};
+    const inverse = {};
     for (let i = 0; i < rule.rules.length; i += 1) {
       const current = rule.rules[i];
       for (let j = 0; j < current.texts.length; j += 1) {
+        const source = current.texts[j];
         const key = this.normalize(current.texts[j]);
         if (!dict[key]) {
           dict[key] = [];
         }
         dict[key].push(current);
+        inverse[key] = source;
       }
     }
     rule.dict = dict;
+    rule.inverseDict = inverse;
   }
 
   getBestExact(srcText, words, rule) {
@@ -231,7 +234,7 @@ class ExtractorEnum {
               entity: rule.name,
               type: rule.type,
               option: subrule[k].option,
-              sourceText: str,
+              sourceText: rule.inverseDict[str],
               utteranceText: srcText.substring(
                 wordPositions[i].start,
                 wordPositions[j].end + 1
@@ -245,42 +248,47 @@ class ExtractorEnum {
   }
 
   extractFromRule(text, rule, words, threshold) {
-    const edges = [];
-    if (threshold >= 1) {
-      if (!rule.dict) {
-        this.buildRuleDict(rule);
-      }
-      const newEdges = this.getBestExact(text, words, rule);
-      for (let i = 0; i < newEdges.length; i += 1) {
-        edges.push(newEdges[i]);
-      }
-    } else {
-      for (let i = 0; i < rule.rules.length; i += 1) {
-        const current = rule.rules[i];
-        for (let j = 0; j < current.texts.length; j += 1) {
-          const newEdges = this.getBestSubstringList(
-            text,
-            current.texts[j],
-            words,
-            current.threshold || threshold
-          );
-          for (let k = 0; k < newEdges.length; k += 1) {
-            edges.push({
-              ...newEdges[k],
-              entity: rule.name,
-              type: rule.type,
-              option: rule.rules[i].option,
-              sourceText: current.texts[j],
-              utteranceText: text.substring(
-                newEdges[k].start,
-                newEdges[k].end + 1
-              ),
-            });
+    if (rule.type === 'enum') {
+      const edges = [];
+      if (threshold >= 1) {
+        if (!rule.dict) {
+          this.buildRuleDict(rule);
+        }
+        const newEdges = this.getBestExact(text, words, rule);
+        for (let i = 0; i < newEdges.length; i += 1) {
+          edges.push(newEdges[i]);
+        }
+      } else {
+        for (let i = 0; i < rule.rules.length; i += 1) {
+          const current = rule.rules[i];
+          if (current && current.option && Array.isArray(current.texts)) {
+            for (let j = 0; j < current.texts.length; j += 1) {
+              const newEdges = this.getBestSubstringList(
+                text,
+                current.texts[j],
+                words,
+                current.threshold || threshold
+              );
+              for (let k = 0; k < newEdges.length; k += 1) {
+                edges.push({
+                  ...newEdges[k],
+                  entity: rule.name,
+                  type: rule.type,
+                  option: rule.rules[i].option,
+                  sourceText: current.texts[j],
+                  utteranceText: text.substring(
+                    newEdges[k].start,
+                    newEdges[k].end + 1
+                  ),
+                });
+              }
+            }
           }
         }
       }
+      return edges;
     }
-    return edges;
+    return [];
   }
 
   extract(srcInput) {

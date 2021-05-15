@@ -77,6 +77,10 @@ class NlpManager {
     return this.nlp.addLanguage(locale);
   }
 
+  removeLanguage(locale) {
+    return this.nlp.removeLanguage(locale);
+  }
+
   assignDomain(locale, intent, domain) {
     return this.nlp.assignDomain(locale, intent, domain);
   }
@@ -186,7 +190,7 @@ class NlpManager {
   }
 
   addBeforeLastCondition(locale, name, words, opts) {
-    return this.ner.addNerBeforeLastCondition(locale, name, words, opts);
+    return this.nlp.addNerBeforeLastCondition(locale, name, words, opts);
   }
 
   describeLanguage(locale, name) {
@@ -298,6 +302,14 @@ class NlpManager {
       }
     }
     return result;
+  }
+
+  addCorpora(corpora) {
+    this.nlp.addCorpora(corpora);
+  }
+
+  addCorpus(corpus) {
+    this.nlp.addCorpus(corpus);
   }
 
   async trainAndEvaluate(fileName) {
